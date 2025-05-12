@@ -1,5 +1,5 @@
 # COMP30024 Artificial Intelligence, Semester 1 2025
-# Project Part B: Game Playing Agent
+# Project Part B: Game Playing Agent (Minimax Version)
 
 from referee.game import PlayerColor, Coord, Direction, Action, MoveAction, GrowAction
 from referee.game.board import Board
@@ -8,8 +8,8 @@ import time
 
 class Agent:
     """
-    Entry point for Freckers game-playing agent using alpha-beta pruning.
-    Enhanced to support multi-jump moves.
+    Entry point for Freckers game-playing agent using minimax.
+    This version implements minimax without alpha-beta pruning for testing purposes.
     """
     def __init__(self, color: PlayerColor, **referee: dict):
         self._color = color
@@ -17,7 +17,7 @@ class Agent:
         # Internal game board representation
         self.board = Board()
         # Maximum search depth
-        self.max_depth = 4
+        self.max_depth = 3
         # Time limit per move (seconds)
         self.time_limit = referee.get("time_remaining", None)
 
@@ -28,10 +28,8 @@ class Agent:
         best_move = GrowAction()
         # Iterative deepening
         for depth in range(1, self.max_depth + 1):
-            alpha = float('-inf')
-            beta = float('inf')
             try:
-                score, move = self.alpha_beta(self.board, depth, alpha, beta, True, start)
+                score, move = self.minimax(self.board, depth, True, start)
                 if move is not None:
                     best_move = move
             except TimeoutError:
@@ -45,7 +43,7 @@ class Agent:
         # Apply the action to update internal game state
         self.board.apply_action(action)
 
-    def alpha_beta(self, board: Board, depth: int, alpha: float, beta: float, maximizing: bool, start_time: float):
+    def minimax(self, board: Board, depth: int, maximizing: bool, start_time: float):
         # Time check
         if self.time_limit and time.time() - start_time > self.time_limit * 0.9:
             raise TimeoutError
@@ -53,40 +51,57 @@ class Agent:
         if depth == 0 or board.game_over:
             return self.evaluate(board), None
 
-        best_move = None
         player = self._color if maximizing else self._opponent
         
         # Generate all legal moves including multi-jumps
         moves = self.generate_moves(board, player)
         
-        for move in moves:
-            # Time check before exploring child
-            if self.time_limit and time.time() - start_time > self.time_limit * 0.9:
-                break
-                
-            # Try to apply the move
-            try:
-                board.apply_action(move)
-                score, _ = self.alpha_beta(board, depth - 1, alpha, beta, not maximizing, start_time)
-                board.undo_action()
-                
-                if maximizing:
-                    if score > alpha:
-                        alpha = score
-                        best_move = move
-                else:
-                    if score < beta:
-                        beta = score
-                        best_move = move
-
-                # Prune
-                if alpha >= beta:
+        if maximizing:
+            best_score = float('-inf')
+            best_move = None
+            
+            for move in moves:
+                # Time check before exploring child
+                if self.time_limit and time.time() - start_time > self.time_limit * 0.9:
                     break
-            except Exception:
-                # If the move is illegal, simply skip it
-                continue
-
-        return (alpha, best_move) if maximizing else (beta, best_move)
+                    
+                # Try to apply the move
+                try:
+                    board.apply_action(move)
+                    score, _ = self.minimax(board, depth - 1, False, start_time)
+                    board.undo_action()
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_move = move
+                except Exception:
+                    # If the move is illegal, simply skip it
+                    continue
+                    
+            return best_score, best_move
+        else:
+            best_score = float('inf')
+            best_move = None
+            
+            for move in moves:
+                # Time check before exploring child
+                if self.time_limit and time.time() - start_time > self.time_limit * 0.9:
+                    break
+                    
+                # Try to apply the move
+                try:
+                    board.apply_action(move)
+                    score, _ = self.minimax(board, depth - 1, True, start_time)
+                    board.undo_action()
+                    
+                    if score < best_score:
+                        best_score = score
+                        best_move = move
+                except Exception:
+                    # If the move is illegal, simply skip it
+                    continue
+                    
+            return best_score, best_move
 
     def generate_moves(self, board: Board, player: PlayerColor):
         """
